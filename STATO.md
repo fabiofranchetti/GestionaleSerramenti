@@ -13,7 +13,12 @@ scritto**, per scelta.
 - Lo schema di apertura si compone (ante + tipi), non si disegna a mano.
 - Offline first come vincolo non negoziabile.
 - Convenzione di vista: sempre dall'interno, fissa, nessun interruttore in UI
-  (`docs/decisioni/0001-convenzione-vista.md`).
+  (`docs/decisioni/0001-convenzione-vista.md`). Non è un default di Cantiere.
+- Numerazione Posizioni: codici liberi e sempre modificabili, nessuna
+  rinumerazione automatica (`03-app-campo.md`).
+- Misure: nessun avanzamento automatico fra i campi; tipo di misura senza
+  default, scelta esplicita ogni volta.
+- Nota vocale: registrazione audio separata dalle note scritte, non trascritta.
 
 ## Prossimo passo (uno solo)
 **Validare il modello dati su carta.** Prendere tre rilievi veri già fatti e

@@ -35,8 +35,9 @@ schermata, perché è la fonte di errore più costosa del mestiere.
 - `data rilievo`
 - `note accesso` (ponteggio, ascensore, parcheggio, orari, chiavi)
 - `stato` (vedi ciclo di vita)
-- `default di cantiere`: materiale, colore, tipo posa, vetro, convenzione vista.
-  Servono a pre-compilare ogni nuova Posizione.
+- `default di cantiere`: materiale, colore, tipo posa, vetro.
+  Servono a pre-compilare ogni nuova Posizione. (La convenzione di vista **non**
+  è un default di Cantiere: è fissa per tutta l'app, vedi sopra.)
 
 ### Posizione
 - `codice` (P1, P2, … modificabile)
