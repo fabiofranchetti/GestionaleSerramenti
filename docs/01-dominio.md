@@ -20,9 +20,9 @@ sinonimi.
 
 ## Convenzione di vista
 
-`[DA DECIDERE]` Le aperture si indicano viste **dall'interno** o **dall'esterno**?
-Va fissato una volta per tutte e scritto nella UI in ogni schermata, perché è la
-fonte di errore più costosa del mestiere.
+Le aperture si indicano **sempre viste dall'interno**. Fissato una volta per
+tutte (vedi `decisioni/0001-convenzione-vista.md`) e scritto nella UI in ogni
+schermata, perché è la fonte di errore più costosa del mestiere.
 
 ## Entità
 
