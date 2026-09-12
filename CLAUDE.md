@@ -24,6 +24,21 @@ restano l'unico archivio: **questo progetto crea un archivio che oggi non esiste
 - Lingua: documentazione, UI e nomi di dominio in italiano. Codice in inglese
   dove è convenzione (parole chiave, librerie), nomi di entità in italiano.
 
+## Nota per Claude: utente alle prime armi con GitHub
+
+Questa è la prima volta che il committente lavora con GitHub. Sa che è utile
+e vuole imparare, ma non ha familiarità con i concetti base (repository,
+branch, commit, push, pull, pull request, merge, ecc.) né con la terminologia.
+
+Usiamo questo progetto anche per fargli prendere confidenza. Quindi:
+
+- Ogni volta che si esegue un'operazione che riguarda GitHub (creare un
+  branch, fare commit, push, pull, aprire una PR, gestire conflitti, ecc.),
+  **spiegare prima** in italiano semplice cosa si sta per fare e cosa
+  significa il termine tecnico usato, non dare per scontato che sia chiaro.
+- Preferire spiegazioni brevi e concrete, legate a quello che sta succedendo
+  in quel momento, invece di lezioni teoriche generiche.
+
 ## Indice documentazione
 
 Aprire solo il file che serve al task in corso.
