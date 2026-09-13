@@ -3,7 +3,6 @@ name: Pubblica l'app su GitHub Pages
 on:
   push:
     branches: [claude/app-prototype-usable-tv8ud2]
-    paths: [app/**]
   workflow_dispatch:
 
 permissions:
