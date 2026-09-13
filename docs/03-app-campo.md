@@ -15,10 +15,14 @@ controllo a ogni modifica. Se sale, si è sbagliato qualcosa.
 ## Flusso principale
 
 1. **Apri o crea Cantiere** → si impostano una volta i default (materiale,
-   colore, tipo posa, vetro, convenzione di vista).
-2. **Nuova Posizione** → eredita i default.
-3. **Misure**: tastierino numerico grande, avanzamento automatico al campo
-   successivo, unità fissa in mm.
+   colore, tipo posa, vetro).
+2. **Nuova Posizione** → si scrive subito l'ambiente (riferimento libero, es.
+   "cucina", "camera 1") per ritrovarla facilmente; eredita poi i default di
+   Cantiere. Il codice (P1, P2…) è proposto in automatico ma resta modificabile.
+3. **Misure**: tastierino numerico grande, **nessun avanzamento automatico**
+   fra i campi — si passa a mano da uno all'altro; unità fissa in mm. Il tipo
+   di misura (luce muro / luce architettonica / altro) non ha un default:
+   va scelto ogni volta, perché dipende dal cantiere.
 4. **Schema**: si sceglie il numero di ante, poi per ogni anta il tipo. L'app
    disegna lo schema. Prima però si offrono le **configurazioni ricorrenti**
    (monoanta DX, due ante con ribalta a SX, portafinestra 2 ante…): un tap solo.
@@ -31,7 +35,9 @@ controllo a ogni modifica. Se sale, si è sbagliato qualcosa.
 - **Duplica Posizione.** In una palazzina è la maggior parte del lavoro:
   "P3 = come P2 ma 30 cm più stretta".
 - **Configurazioni ricorrenti** come libreria personale, alimentata dall'uso.
-- **Dettatura vocale** per le note e, se possibile, per le misure.
+- **Nota vocale** come registrazione audio allegata alla Posizione, separata
+  dalle note scritte — non trascritta in testo. Una dettatura vera e propria
+  (voce → testo), anche per le misure, resta un'ipotesi da valutare a parte.
 - **Distanziometro laser Bluetooth**: la misura entra nel campo attivo premendo
   il tasto sullo strumento. `[DA VERIFICARE]` quale modello possiede il
   committente e se espone un protocollo utilizzabile. Da progettare come
@@ -47,8 +53,9 @@ controllo a ogni modifica. Se sale, si è sbagliato qualcosa.
 - Stessa Posizione modificata da due dispositivi (raro ma possibile).
 - Rilievo iniziato nel cantiere sbagliato → spostare una Posizione da un
   Cantiere a un altro deve essere possibile.
-- Numerazione: se si inserisce una Posizione fra P4 e P5, cosa succede?
-  `[DA DECIDERE]` — proposta: codici liberi, nessuna rinumerazione automatica.
+- Numerazione: codici liberi. L'app propone il prossimo numero libero, ma il
+  codice resta sempre modificabile a mano (es. inserire "P4bis" fra P4 e P5).
+  Nessuna rinumerazione automatica delle altre Posizioni.
 
 ## Estetica
 
