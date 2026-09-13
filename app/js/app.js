@@ -1,7 +1,10 @@
 import { db, uuid, nowIso } from "./db.js";
 import { calcolaControlli, trovaDuplicatiSospetti, isCompleta, livelloClasse } from "./checks.js";
 import { TIPI_ANTA, TIPO_ANTA_LABEL, PRESET_ANTE, svgAnta } from "./ante.js";
-import { getCloud, sincronizzaCantiere, sincronizzaPosizione, leggiArchivioUfficio } from "./cloud.js";
+import {
+  getClientId, setClientId, isConnesso, disconnetti, connetti,
+  sincronizzaCantiereSuDrive, leggiArchivioDaDrive, scaricaFotoDaDrive,
+} from "./drive.js";
 
 const root = document.getElementById("app");
 
@@ -159,6 +162,8 @@ async function screenElencoCantieri() {
     )
   );
 
+  root.appendChild(await renderImpostazioni());
+
   if (cantieri.length === 0) {
     root.appendChild(h("div", { class: "empty-state" }, "Nessun cantiere ancora. Crea il primo rilievo."));
     return;
@@ -180,6 +185,33 @@ async function screenElencoCantieri() {
       )
     );
   }
+}
+
+async function renderImpostazioni() {
+  const clientIdAttuale = getClientId();
+  const dettagli = h("details", { class: "card" },
+    h("summary", { style: "font-weight:700;cursor:pointer;" }, "⚙️ Impostazioni: sincronizzazione con Google Drive")
+  );
+  const corpo = h("div", { style: "margin-top:10px;" },
+    h("div", { class: "list-item-sub" },
+      "Serve un Client ID Google (gratuito, si crea una volta sola sulla Google Cloud Console). Vedi docs/decisioni/0002-sincronizzazione-google-drive.md per i passaggi."
+    ),
+    h("div", { class: "field" },
+      h("label", {}, "Client ID Google"),
+      h("input", { type: "text", value: clientIdAttuale, id: "input-client-id" })
+    ),
+    h("div", { class: "row" },
+      h("button", { class: "primary", onclick: () => {
+        const val = document.getElementById("input-client-id").value;
+        setClientId(val);
+        disconnetti();
+        alert("Client ID salvato.");
+      } }, "Salva"),
+      h("button", { onclick: () => { disconnetti(); alert("Disconnesso da Google Drive su questa sessione."); } }, "Disconnetti")
+    )
+  );
+  dettagli.appendChild(corpo);
+  return dettagli;
 }
 
 // ---------- schermata: cantiere ----------
@@ -297,12 +329,21 @@ async function screenCantiere(id) {
     await db.put("cantieri", cantiere);
   });
 
-  // Sincronizzazione con l'ufficio (banco di prova, vedi js/cloud.js)
+  // Sincronizzazione con Google Drive (vedi js/drive.js e docs/decisioni/0002)
   const syncBox = h("div", {});
   root.appendChild(syncBox);
   await renderSyncBox(syncBox, cantiere);
 
   // Posizioni
+  const tutteLePosizioni = await db.getAllByIndex("posizioni", "cantiereId", cantiere.id);
+  const completeCount = tutteLePosizioni.filter(isCompleta).length;
+  root.appendChild(
+    h("div", { class: "completezza", style: "margin-bottom:8px;" },
+      tutteLePosizioni.length
+        ? `${completeCount}/${tutteLePosizioni.length} Posizioni complete`
+        : "Nessuna Posizione ancora"
+    )
+  );
   const posBox = h("div", {});
   root.appendChild(h("h2", {}, "Posizioni"));
   root.appendChild(posBox);
@@ -318,31 +359,33 @@ async function screenCantiere(id) {
 
 async function renderSyncBox(container, cantiere) {
   clear(container);
-  const cloud = await getCloud();
-  if (!cloud) {
+  const clientId = getClientId();
+  if (!clientId) {
     container.appendChild(
-      h("div", { class: "banner" }, "☁️ Invio all'ufficio non disponibile: questa pagina non gira come link pubblicato. Apri l'app dal link cloud per provare la sincronizzazione.")
+      h("div", { class: "banner" }, "☁️ Google Drive non configurato: imposta il Client ID nelle Impostazioni (home) per inviare i rilievi.")
     );
     return;
   }
+
   const posizioni = await db.getAllByIndex("posizioni", "cantiereId", cantiere.id);
   const sincronizzate = posizioni.filter((p) => p.sync && p.sync.stato === "sincronizzato").length;
 
-  const stato = h("div", { class: "banner" }, `☁️ Ufficio: ${sincronizzate}/${posizioni.length} Posizioni inviate.`);
-  const btn = h("button", { class: "primary", style: "width:100%;margin-bottom:12px;" }, "Invia tutto all'ufficio");
+  const stato = h("div", { class: "banner" },
+    isConnesso()
+      ? `☁️ Google Drive: ${sincronizzate}/${posizioni.length} Posizioni inviate.`
+      : "☁️ Non ancora connesso a Google Drive."
+  );
+  const btn = h("button", { class: "primary", style: "width:100%;margin-bottom:12px;" },
+    isConnesso() ? "Invia tutto su Google Drive" : "Connetti Google Drive e invia"
+  );
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Invio in corso…";
     try {
-      await sincronizzaCantiere(cantiere);
-      for (const p of posizioni) {
-        try {
-          const fotoAggiornate = await sincronizzaPosizione(p, cloud);
-          p.foto = fotoAggiornate;
-          p.sync = { stato: "sincronizzato", il: nowIso() };
-        } catch (err) {
-          p.sync = { stato: "errore", il: nowIso(), messaggio: err.message };
-        }
+      if (!isConnesso()) await connetti();
+      const posizioniAggiornate = await sincronizzaCantiereSuDrive(cantiere, posizioni);
+      for (const p of posizioniAggiornate) {
+        p.sync = { stato: "sincronizzato", il: nowIso() };
         await db.put("posizioni", p);
       }
     } catch (err) {
@@ -427,50 +470,81 @@ async function esportaBackup(cantiereId) {
 async function screenUfficio() {
   root.appendChild(topbar("Vista ufficio", "#/"));
   root.appendChild(
-    h("div", { class: "banner" }, "Questi dati vengono letti dall'archivio condiviso (cloud), non dal dispositivo: rappresentano cosa vede l'ufficio dopo che il rilievo è stato inviato dal cantiere.")
+    h("div", { class: "banner" }, "Questi dati vengono letti da Google Drive, non dal dispositivo: rappresentano cosa vede l'ufficio dopo che il rilievo è stato inviato dal cantiere.")
   );
 
-  const archivio = await leggiArchivioUfficio();
-  if (!archivio) {
+  const clientId = getClientId();
+  if (!clientId) {
     root.appendChild(
-      h("div", { class: "bloccante" }, "Non disponibile: questa pagina non gira come link pubblicato, quindi non c'è un archivio condiviso da leggere. Apri l'app dal link cloud per provare questa schermata.")
+      h("div", { class: "bloccante" }, "Google Drive non configurato: imposta il Client ID nelle Impostazioni (home).")
     );
     return;
   }
 
-  if (archivio.cantieri.length === 0) {
-    root.appendChild(h("div", { class: "empty-state" }, "Nessun rilievo ancora inviato all'ufficio. Vai in un Cantiere e premi “Invia tutto all'ufficio”."));
-    return;
-  }
+  const btn = h("button", { class: "primary", style: "width:100%;margin-bottom:12px;" }, isConnesso() ? "Aggiorna dati da Drive" : "Connetti Google Drive");
+  const risultati = h("div", {});
+  root.appendChild(btn);
+  root.appendChild(risultati);
 
-  for (const c of archivio.cantieri) {
-    const posizioniCantiere = archivio.posizioni.filter((p) => p.cantiereId === c.id);
-    root.appendChild(
-      h("div", { class: "card" },
-        h("div", { class: "row between" },
-          h("div", { class: "list-item-title" }, c.nome || "(senza nome)"),
-          h("span", { class: "stato-pill" }, c.stato)
-        ),
-        h("div", { class: "list-item-sub" }, c.indirizzo || "—"),
-        h("div", { class: "list-item-sub" }, [c.cliente?.nome, c.cliente?.telefono].filter(Boolean).join(" — ")),
-        h("div", { class: "list-item-sub" }, `${posizioniCantiere.length} Posizione/i ricevute`)
-      )
-    );
-    for (const p of posizioniCantiere) {
-      const m = p.misure || {};
-      root.appendChild(
-        h("div", { class: "card", style: "margin-left:18px;" },
+  async function carica() {
+    clear(risultati);
+    risultati.appendChild(h("div", { class: "list-item-sub" }, "Lettura da Google Drive…"));
+    let archivio;
+    try {
+      if (!isConnesso()) await connetti();
+      archivio = await leggiArchivioDaDrive();
+    } catch (err) {
+      clear(risultati);
+      risultati.appendChild(h("div", { class: "bloccante" }, "Lettura non riuscita: " + err.message));
+      return;
+    }
+    clear(risultati);
+
+    if (archivio.length === 0) {
+      risultati.appendChild(h("div", { class: "empty-state" }, "Nessun rilievo ancora inviato. Vai in un Cantiere e premi “Invia tutto su Google Drive”."));
+      return;
+    }
+
+    for (const rilievo of archivio) {
+      const c = rilievo.cantiere;
+      const posizioniCantiere = rilievo.posizioni || [];
+      risultati.appendChild(
+        h("div", { class: "card" },
+          h("div", { class: "row between" },
+            h("div", { class: "list-item-title" }, c.nome || "(senza nome)"),
+            h("span", { class: "stato-pill" }, c.stato)
+          ),
+          h("div", { class: "list-item-sub" }, c.indirizzo || "—"),
+          h("div", { class: "list-item-sub" }, [c.cliente?.nome, c.cliente?.telefono].filter(Boolean).join(" — ")),
+          h("div", { class: "list-item-sub" }, `${posizioniCantiere.length} Posizione/i ricevute — inviato il ${new Date(rilievo.esportatoIl).toLocaleString("it-IT")}`)
+        )
+      );
+      for (const p of posizioniCantiere) {
+        const m = p.misure || {};
+        const fotoGrid = h("div", { class: "foto-grid" });
+        const card = h("div", { class: "card", style: "margin-left:18px;" },
           h("div", { class: "list-item-title" }, p.codice || "(senza codice)"),
           h("div", { class: "list-item-sub" }, [p.piano, p.ambiente].filter(Boolean).join(" — ") || "—"),
           h("div", { class: "list-item-sub" }, `Larghezza: ${[m.larghezzaAlto, m.larghezzaCentro, m.larghezzaBasso].filter((v) => v !== "" && v != null).join("/")} mm — Altezza: ${[m.altezzaSx, m.altezzaCentro, m.altezzaDx].filter((v) => v !== "" && v != null).join("/")} mm`),
-          p.foto && p.foto.length
-            ? h("div", { class: "foto-grid" }, ...p.foto.filter((f) => f.url).map((f) => h("div", { class: "foto-thumb" }, h("img", { src: f.url }))))
-            : h("div", { class: "list-item-sub" }, "Nessuna foto ricevuta"),
+          p.foto && p.foto.length ? fotoGrid : h("div", { class: "list-item-sub" }, "Nessuna foto ricevuta"),
           p.note ? h("div", { class: "list-item-sub" }, "Note: " + p.note) : null
-        )
-      );
+        );
+        risultati.appendChild(card);
+        for (const f of p.foto || []) {
+          if (!f.driveFileId) continue;
+          const thumb = h("div", { class: "foto-thumb" }, h("div", { class: "list-item-sub" }, "…"));
+          fotoGrid.appendChild(thumb);
+          scaricaFotoDaDrive(f.driveFileId).then((url) => {
+            clear(thumb);
+            thumb.appendChild(h("img", { src: url }));
+          }).catch(() => { clear(thumb); thumb.appendChild(h("div", { class: "list-item-sub" }, "?")); });
+        }
+      }
     }
   }
+
+  btn.addEventListener("click", carica);
+  await carica();
 }
 
 // ---------- schermata: posizione ----------

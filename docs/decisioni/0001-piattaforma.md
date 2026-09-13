@@ -49,3 +49,15 @@ rete per funzionare.
   offline vera e propria: funziona offline nell'uso (i dati sono locali),
   ma il primo caricamento della pagina richiede una connessione. Va
   aggiunto prima del collaudo sul campo (`06-operativo.md`).
+
+## Nota successiva (2026-09-13)
+Il committente ha chiarito che l'app finale deve essere installabile in
+modo assolutamente indipendente da Claude, tipo APK o da Play Store. Questo
+non cambia questa decisione: **il codice resta HTML/CSS/JS (`app/`)**, senza
+nulla di specifico a Claude — lo conferma anche `docs/decisioni/0002`, che
+sceglie Google Drive (non un servizio Claude) per la sincronizzazione.
+Quando si arriva a distribuire l'app, la strada più diretta è
+impacchettare la stessa PWA come APK (es. con una Trusted Web Activity),
+senza riscrivere l'interfaccia. Se in futuro servisse una vera app nativa
+(es. per accessi hardware che il web non copre), sarà una nuova decisione,
+non una modifica di questa.
