@@ -1,6 +1,7 @@
 import { db, uuid, nowIso } from "./db.js";
 import { calcolaControlli, trovaDuplicatiSospetti, isCompleta, livelloClasse } from "./checks.js";
 import { TIPI_ANTA, TIPO_ANTA_LABEL, PRESET_ANTE, svgAnta } from "./ante.js";
+import { getCloud, sincronizzaCantiere, sincronizzaPosizione, leggiArchivioUfficio } from "./cloud.js";
 
 const root = document.getElementById("app");
 
@@ -78,6 +79,7 @@ function nuovaPosizione(cantiere, codiceSuggerito) {
     foto: [],
     note: "",
     prodotti: [nuovoProdotto(cantiere)],
+    sync: { stato: "locale", il: null },
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
@@ -108,6 +110,8 @@ async function route() {
   try {
     if (parts.length === 0) {
       await screenElencoCantieri();
+    } else if (parts[0] === "ufficio") {
+      await screenUfficio();
     } else if (parts[0] === "cantiere" && parts[1] === "nuovo") {
       const c = nuovoCantiere();
       await db.put("cantieri", c);
@@ -149,7 +153,10 @@ async function screenElencoCantieri() {
   const cantieri = (await db.getAll("cantieri")).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   root.appendChild(
-    h("button", { class: "primary", style: "width:100%;margin-bottom:14px;", onclick: () => (location.hash = "#/cantiere/nuovo") }, "+ Nuovo cantiere")
+    h("div", { class: "row", style: "margin-bottom:14px;" },
+      h("button", { class: "primary", style: "flex:2;", onclick: () => (location.hash = "#/cantiere/nuovo") }, "+ Nuovo cantiere"),
+      h("button", { style: "flex:1;", onclick: () => (location.hash = "#/ufficio") }, "☁️ Vista ufficio")
+    )
   );
 
   if (cantieri.length === 0) {
@@ -290,6 +297,11 @@ async function screenCantiere(id) {
     await db.put("cantieri", cantiere);
   });
 
+  // Sincronizzazione con l'ufficio (banco di prova, vedi js/cloud.js)
+  const syncBox = h("div", {});
+  root.appendChild(syncBox);
+  await renderSyncBox(syncBox, cantiere);
+
   // Posizioni
   const posBox = h("div", {});
   root.appendChild(h("h2", {}, "Posizioni"));
@@ -302,6 +314,45 @@ async function screenCantiere(id) {
       h("button", { onclick: () => esportaBackup(cantiere.id) }, "Esporta backup")
     )
   );
+}
+
+async function renderSyncBox(container, cantiere) {
+  clear(container);
+  const cloud = await getCloud();
+  if (!cloud) {
+    container.appendChild(
+      h("div", { class: "banner" }, "☁️ Invio all'ufficio non disponibile: questa pagina non gira come link pubblicato. Apri l'app dal link cloud per provare la sincronizzazione.")
+    );
+    return;
+  }
+  const posizioni = await db.getAllByIndex("posizioni", "cantiereId", cantiere.id);
+  const sincronizzate = posizioni.filter((p) => p.sync && p.sync.stato === "sincronizzato").length;
+
+  const stato = h("div", { class: "banner" }, `☁️ Ufficio: ${sincronizzate}/${posizioni.length} Posizioni inviate.`);
+  const btn = h("button", { class: "primary", style: "width:100%;margin-bottom:12px;" }, "Invia tutto all'ufficio");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Invio in corso…";
+    try {
+      await sincronizzaCantiere(cantiere);
+      for (const p of posizioni) {
+        try {
+          const fotoAggiornate = await sincronizzaPosizione(p, cloud);
+          p.foto = fotoAggiornate;
+          p.sync = { stato: "sincronizzato", il: nowIso() };
+        } catch (err) {
+          p.sync = { stato: "errore", il: nowIso(), messaggio: err.message };
+        }
+        await db.put("posizioni", p);
+      }
+    } catch (err) {
+      alert("Invio non riuscito: " + err.message);
+    }
+    await renderSyncBox(container, cantiere);
+  });
+
+  container.appendChild(stato);
+  container.appendChild(btn);
 }
 
 async function renderElencoPosizioni(container, cantiere) {
@@ -331,6 +382,7 @@ async function renderElencoPosizioni(container, cantiere) {
           h("span", { class: "stato-pill", style: completa ? "" : "background:#fee2e2;border-color:#991b1b;color:#991b1b;" }, completa ? "completa" : "incompleta")
         ),
         h("div", { class: "list-item-sub" }, [p.piano, p.ambiente].filter(Boolean).join(" — ") || "—"),
+        h("div", { class: "list-item-sub" }, p.sync && p.sync.stato === "sincronizzato" ? "☁️ inviata all'ufficio" : "non ancora inviata"),
         controlli.length ? h("div", { class: "list-item-sub" }, `${controlli.length} controllo/i da rivedere`) : null,
         h("div", { class: "row", style: "margin-top:6px;" },
           h("button", { onclick: (e) => { e.stopPropagation(); duplicaPosizione(cantiere, p); } }, "Duplica")
@@ -348,6 +400,7 @@ async function duplicaPosizione(cantiere, posizione) {
   clone.foto = [];
   clone.note = "";
   clone.prodotti = clone.prodotti.map((p) => ({ ...p, id: uuid() }));
+  clone.sync = { stato: "locale", il: null };
   clone.createdAt = nowIso();
   clone.updatedAt = nowIso();
   await db.put("posizioni", clone);
@@ -368,6 +421,56 @@ async function esportaBackup(cantiereId) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ---------- schermata: ufficio (dati letti dall'archivio condiviso) ----------
+async function screenUfficio() {
+  root.appendChild(topbar("Vista ufficio", "#/"));
+  root.appendChild(
+    h("div", { class: "banner" }, "Questi dati vengono letti dall'archivio condiviso (cloud), non dal dispositivo: rappresentano cosa vede l'ufficio dopo che il rilievo è stato inviato dal cantiere.")
+  );
+
+  const archivio = await leggiArchivioUfficio();
+  if (!archivio) {
+    root.appendChild(
+      h("div", { class: "bloccante" }, "Non disponibile: questa pagina non gira come link pubblicato, quindi non c'è un archivio condiviso da leggere. Apri l'app dal link cloud per provare questa schermata.")
+    );
+    return;
+  }
+
+  if (archivio.cantieri.length === 0) {
+    root.appendChild(h("div", { class: "empty-state" }, "Nessun rilievo ancora inviato all'ufficio. Vai in un Cantiere e premi “Invia tutto all'ufficio”."));
+    return;
+  }
+
+  for (const c of archivio.cantieri) {
+    const posizioniCantiere = archivio.posizioni.filter((p) => p.cantiereId === c.id);
+    root.appendChild(
+      h("div", { class: "card" },
+        h("div", { class: "row between" },
+          h("div", { class: "list-item-title" }, c.nome || "(senza nome)"),
+          h("span", { class: "stato-pill" }, c.stato)
+        ),
+        h("div", { class: "list-item-sub" }, c.indirizzo || "—"),
+        h("div", { class: "list-item-sub" }, [c.cliente?.nome, c.cliente?.telefono].filter(Boolean).join(" — ")),
+        h("div", { class: "list-item-sub" }, `${posizioniCantiere.length} Posizione/i ricevute`)
+      )
+    );
+    for (const p of posizioniCantiere) {
+      const m = p.misure || {};
+      root.appendChild(
+        h("div", { class: "card", style: "margin-left:18px;" },
+          h("div", { class: "list-item-title" }, p.codice || "(senza codice)"),
+          h("div", { class: "list-item-sub" }, [p.piano, p.ambiente].filter(Boolean).join(" — ") || "—"),
+          h("div", { class: "list-item-sub" }, `Larghezza: ${[m.larghezzaAlto, m.larghezzaCentro, m.larghezzaBasso].filter((v) => v !== "" && v != null).join("/")} mm — Altezza: ${[m.altezzaSx, m.altezzaCentro, m.altezzaDx].filter((v) => v !== "" && v != null).join("/")} mm`),
+          p.foto && p.foto.length
+            ? h("div", { class: "foto-grid" }, ...p.foto.filter((f) => f.url).map((f) => h("div", { class: "foto-thumb" }, h("img", { src: f.url }))))
+            : h("div", { class: "list-item-sub" }, "Nessuna foto ricevuta"),
+          p.note ? h("div", { class: "list-item-sub" }, "Note: " + p.note) : null
+        )
+      );
+    }
+  }
 }
 
 // ---------- schermata: posizione ----------

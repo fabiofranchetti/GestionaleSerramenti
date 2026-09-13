@@ -9,12 +9,35 @@ principale: Cantiere → Posizione (misure, tipo di posa, foto, note, schema
 di apertura composto, prodotti multipli) → controlli di coerenza →
 salvataggio locale (IndexedDB, nessuna rete richiesta per l'uso).
 
-Provato con test automatici in browser (Playwright): creazione cantiere e
+Provato con test automatici in browser (Playwright), incluso un finto
+rilievo con misure verosimili (cucina, soggiorno, camera — luci muro,
+diagonali, spessore muro, davanzale, note plausibili): creazione cantiere e
 posizione, inserimento misure, preset di schema apertura, aggiunta/rimozione
 foto e prodotti, duplica Posizione, export backup JSON, blocco del passaggio
 a stato "rilevato" con controlli non superati. **Non ancora provato su un
 device reale in cantiere** — resta da fare per il collaudo di
 `06-operativo.md`.
+
+**Aggiunto un banco di prova per l'invio dei dati all'ufficio**
+(`app/js/cloud.js`): dal Cantiere, il pulsante "Invia tutto all'ufficio"
+manda le Posizioni (misure, schema, prodotti) e le foto a un archivio
+condiviso; la schermata "Vista ufficio" li rilegge da lì, non dal
+dispositivo — dimostra concretamente "torno in ufficio e ritrovo il
+rilievo" anche da un altro device. **Attenzione, importante:**
+- Funziona solo quando l'app gira come pagina pubblicata dentro
+  l'interfaccia di Claude (usa una funzione della piattaforma per lo
+  storage condiviso). Se il link si apre come normale pagina web esterna,
+  l'app lo segnala ("non disponibile") e resta comunque utilizzabile in
+  locale, senza rompersi.
+- **Non è la decisione di backend** che `04-dati-sync.md` lascia ancora
+  `[DA DECIDERE]` — è un modo per provare subito il concetto, senza
+  scegliere né pagare un fornitore cloud vero. La scelta definitiva
+  (costo ricorrente, controllo del dato, backup indipendente dal
+  fornitore) resta da fare con calma.
+- Non ho potuto verificare io stesso l'invio/ricezione reale end-to-end
+  (il mio ambiente di test non apre l'app nello stesso modo in cui la
+  apri tu dentro Claude): va provato da te sul link pubblicato e
+  segnalato cosa succede, così sistemo eventuali problemi.
 
 ## Deciso finora
 - Il focus è il rilievo, non il preventivo.
